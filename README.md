@@ -1,10 +1,43 @@
 # rustydav
 
-[![build](https://github.com/andreinbio/rustydav/workflows/build/badge.svg)](https://github.com/andreinbio/rustydav/actions?query=workflow%3Abuild)
-[![tests](https://github.com/andreinbio/rustydav/workflows/test/badge.svg)](https://github.com/andreinbio/rustydav/actions?query=workflow%3Atest)
-[![crates.io](https://img.shields.io/crates/v/rustydav.svg)](https://crates.io/crates/rustydav)
-[![Documentation](https://docs.rs/rustydav/badge.svg)](https://docs.rs/rustydav)
-[![GPL-3.0 licensed](https://img.shields.io/crates/l/rustydav.svg)](./LICENSE)
+> Async  
+> Add function: parse_xml to file list, see file.rs  
+> Warning: This is deeply customized for my personal need of read Synology file
+
+## Usage
+
+
+```rust
+use webdavc::client;
+use webdavc::file::parse_xml;
+use webdavc::prelude::*;
+
+async fn scan() -> Result<(), String> {
+    let webdav_client = client::Client::init("username", "pwd");
+    let base_url = "https://yourwebdav.com";
+    let resp = webdav_client
+        .list(base_url, "1")
+        .await
+        .map_err(|e| e.to_string())?;
+    let resp = resp
+        .text()
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|x| parse_xml(&x)).and_then(|x|
+        // remove first element if any
+        if x.len() > 0 {
+            Ok(x[1..].to_vec())
+        } else {
+            Ok(x)
+        }
+        )?;
+    println!("{:?}", resp);
+    Ok(())
+}
+
+```
+
+
 
 Implementation of webdav requests in rust
 

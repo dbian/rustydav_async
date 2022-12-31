@@ -25,7 +25,7 @@ use std::collections::HashMap;
 pub struct Client {
     username: String,
     password: String,
-    client: reqwest::blocking::Client,
+    client: reqwest::Client,
 }
 
 impl Client {
@@ -36,13 +36,16 @@ impl Client {
         Client {
             username: username.to_owned(),
             password: password.to_owned(),
-            client: reqwest::blocking::Client::new(),
+            client: reqwest::Client::new(),
         }
     }
 
     fn custom_header(&self, name: &str, value: &str) -> header::HeaderMap {
         let mut headers = header::HeaderMap::new();
-        headers.insert(header::HeaderName::from_bytes(name.as_bytes()).unwrap(), header::HeaderValue::from_bytes(value.as_bytes()).unwrap());
+        headers.insert(
+            header::HeaderName::from_bytes(name.as_bytes()).unwrap(),
+            header::HeaderValue::from_bytes(value.as_bytes()).unwrap(),
+        );
         headers
     }
 
@@ -63,9 +66,8 @@ impl Client {
     /// Get a file from Webdav server
     ///
     /// Use absolute path to the webdav server file location
-    pub fn get(&self, path: &str) -> Result<Response, Error> {
-        self.start_request(Method::GET, path)
-            .send()
+    pub async fn get(&self, path: &str) -> Result<Response, Error> {
+        self.start_request(Method::GET, path).send().await
     }
 
     /// Upload a file/zip on Webdav server
@@ -74,36 +76,38 @@ impl Client {
     /// This can be achieved with **std::fs::File** or **zip-rs** for sending zip files.
     ///
     /// Use absolute path to the webdav server folder location
-    pub fn put<B: Into<Body>>(&self, body: B, path: &str) -> Result<Response, Error> {
+    pub async fn put<B: Into<Body>>(&self, body: B, path: &str) -> Result<Response, Error> {
         self.start_request(Method::PUT, path)
             .headers(self.custom_header("content-type", "application/octet-stream"))
             .body(body)
             .send()
+            .await
     }
 
     /// Deletes the collection, file, folder or zip archive at the given path on Webdav server
     ///
     /// Use absolute path to the webdav server file location
-    pub fn delete(&self, path: &str) -> Result<Response, Error> {
-        self.start_request(Method::DELETE, path)
-            .send()
+    pub async fn delete(&self, path: &str) -> Result<Response, Error> {
+        self.start_request(Method::DELETE, path).send().await
     }
 
     /// Unzips the .zip archieve on Webdav server
     ///
     /// Use absolute path to the webdav server file location
-    pub fn unzip(&self, path: &str) -> Result<Response, Error> {
+    pub async fn unzip(&self, path: &str) -> Result<Response, Error> {
         self.start_request(Method::POST, path)
             .form(&self.form_params("method", "UNZIP"))
             .send()
+            .await
     }
 
     /// Creates a directory on Webdav server
     ///
     /// Use absolute path to the webdav server file location
-    pub fn mkcol(&self, path: &str) -> Result<Response, Error> {
+    pub async fn mkcol(&self, path: &str) -> Result<Response, Error> {
         self.start_request(Method::from_bytes(b"MKCOL").unwrap(), path)
             .send()
+            .await
     }
 
     /// Rename or move a collection, file, folder on Webdav server
@@ -111,10 +115,11 @@ impl Client {
     /// If the file location changes it will move the file, if only the file name changes it will rename it.
     ///
     /// Use absolute path to the webdav server file location
-    pub fn mv(&self, from: &str, to: &str) -> Result<Response, Error> {
+    pub async fn mv(&self, from: &str, to: &str) -> Result<Response, Error> {
         self.start_request(Method::from_bytes(b"MOVE").unwrap(), from)
             .headers(self.custom_header("destination", to))
             .send()
+            .await
     }
 
     /// List files and folders at the given path on Webdav server
@@ -123,7 +128,7 @@ impl Client {
     /// The result will contain an xml list with the remote folder contents.
     ///
     /// Use absolute path to the webdav server folder location
-    pub fn list(&self, path: &str, depth: &str) -> Result<Response, Error> {
+    pub async fn list(&self, path: &str, depth: &str) -> Result<Response, Error> {
         let body = r#"<?xml version="1.0" encoding="utf-8" ?>
             <D:propfind xmlns:D="DAV:">
                 <D:allprop/>
@@ -134,6 +139,7 @@ impl Client {
             .headers(self.custom_header("depth", depth))
             .body(body)
             .send()
+            .await
     }
 }
 
@@ -152,58 +158,76 @@ mod tests {
         Client::init("", "")
     }
 
-    #[test]
-    fn test_1_mkcol() {
+    #[tokio::test]
+    async fn test_1_mkcol() {
         let webdav_client = get_client();
-        let result = webdav_client.mkcol(get_server_path("rustydav").as_str());
+        let result = webdav_client
+            .mkcol(get_server_path("rustydav").as_str())
+            .await;
 
         assert_eq!(result.is_ok(), true);
     }
 
-    #[test]
-    fn test_2_put() {
+    #[tokio::test]
+    async fn test_2_put() {
         let webdav_client = get_client();
-        let result = webdav_client.put("rustydav is a cool small library", get_server_path("rustydav/test.txt").as_str());
+        let result = webdav_client
+            .put(
+                "rustydav is a cool small library",
+                get_server_path("rustydav/test.txt").as_str(),
+            )
+            .await;
 
         assert_eq!(result.is_ok(), true);
     }
 
-    #[test]
-    fn test_3_get() {
+    #[tokio::test]
+    async fn test_3_get() {
         let webdav_client = get_client();
-        let result = webdav_client.get(get_server_path("rustydav/test.txt").as_str());
+        let result = webdav_client
+            .get(get_server_path("rustydav/test.txt").as_str())
+            .await;
 
         assert_eq!(result.is_ok(), true);
     }
 
-    #[test]
-    fn test_4_mv() {
+    #[tokio::test]
+    async fn test_4_mv() {
         let webdav_client = get_client();
-        let result = webdav_client.mv(get_server_path("rustydav/test.txt").as_str(), get_server_path("test.txt").as_str());
+        let result = webdav_client
+            .mv(
+                get_server_path("rustydav/test.txt").as_str(),
+                get_server_path("test.txt").as_str(),
+            )
+            .await;
 
         assert_eq!(result.is_ok(), true);
     }
 
-    #[test]
-    fn test_5_delete() {
+    #[tokio::test]
+    async fn test_5_delete() {
         let webdav_client = get_client();
-        let result = webdav_client.delete(get_server_path("test.txt").as_str());
+        let result = webdav_client
+            .delete(get_server_path("test.txt").as_str())
+            .await;
 
         assert_eq!(result.is_ok(), true);
     }
 
-    #[test]
-    fn test_6_unzip() {
+    #[tokio::test]
+    async fn test_6_unzip() {
         let webdav_client = get_client();
-        let result = webdav_client.unzip(get_server_path("test.zip").as_str());
+        let result = webdav_client
+            .unzip(get_server_path("test.zip").as_str())
+            .await;
 
         assert_eq!(result.is_ok(), true);
     }
 
-    #[test]
-    fn test_7_list() {
+    #[tokio::test]
+    async fn test_7_list() {
         let webdav_client = get_client();
-        let result = webdav_client.list(get_server_path("").as_str(), "0");
+        let result = webdav_client.list(get_server_path("").as_str(), "0").await;
 
         assert_eq!(result.is_ok(), true);
     }
